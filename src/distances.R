@@ -61,10 +61,10 @@ nootka_utm <- sf::st_transform(geo_data_sf_bc,
 x_dist <- max(samples_utm$x_utm) - min(samples_utm$x_utm)
 y_dist <- max(samples_utm$y_utm) - min(samples_utm$y_utm)
 nootka <- sf::st_crop(nootka_utm,
-    xmin = min(samples_utm$x_utm) - 0.1 * x_dist,
-    xmax = max(samples_utm$x_utm) + 0.1 * x_dist,
-    ymin = min(samples_utm$y_utm) - 0.1 * y_dist,
-    ymax = max(samples_utm$y_utm) + 0.1 * y_dist
+    xmin = min(samples_utm$x_utm) - 0.09 * x_dist,
+    xmax = max(samples_utm$x_utm) + 0.09 * x_dist,
+    ymin = min(samples_utm$y_utm) - 0.09 * y_dist,
+    ymax = max(samples_utm$y_utm) + 0.09 * y_dist
 )
 sf::st_bbox(nootka)
 ggplot() +
@@ -100,42 +100,24 @@ ggplot() +
 grid_sample <- sf::st_sample(
     inverse_nootka,
     # the size is really large to make a fine grid
-    size = 75000, type = "regular"
+    size = 5000, type = "regular"
 ) |>
     sf::st_as_sf()
 
+ggplot() +
+    geom_sf(data = inverse_nootka) +
+    geom_sf(data = grid_sample, colour = "purple", alpha = 0.1) +
+    geom_sf(data = samples_utm, colour = "blue", alpha = 0.3, size = 3) +
+    geom_sf(
+        data = farms, aes(), fill = "red", colour = "black",
+        shape = 21, size = 3
+    ) +
+    theme_base()
 
-# retain only water points
-water_pts <- grid_sf[!sf::st_intersects(grid_sf, nootka, sparse = FALSE), ]
+# connect the grid
+grid_connected <- nngeo::st_connect(grid_sample, grid_sample, k = 9)
 
-# create an sfnetwork: default is to connect points via edges
-net <- sfnetworks::as_sfnetwork(water_pts, directed = FALSE) |>
+# make the network itself
+network <- sfnetworks::as_sfnetwork(grid_connected, directed = FALSE) |>
     tidygraph::activate("edges") |>
-    dplyr::mutate(weight = sf::st_length(geometry))
-
-# get node coordinates
-nodes <- sf::st_as_sf(net, "nodes")
-
-# find nearest node index for each sample and farm
-samples_utm$nearest_node <- sf::st_nearest_feature(samples_utm, nodes)
-farms_utm$nearest_node <- sf::st_nearest_feature(farms_utm, nodes)
-
-# 3 [SHORTEST PATH] ------------------------------------------------------------
-
-# activate the network for path calculations
-net_graph <- tidygraph::activate(net, "nodes")
-
-# precompute distances between all sample nodes
-sample_nodes <- samples_utm$nearest_node
-
-# get distances between all sample nodes
-dist_mat <- igraph::distances(net_graph,
-    v = sample_nodes,
-    to = sample_nodes,
-    weights = igraph::edge_attr(net_graph, "weight")
-)
-
-# for each row, get the two smallest non-zero distances (nearest neighbors)
-nearest_neighbors <- apply(dist_mat, 1, function(row) {
-    sort(row[row > 0], partial = 1:2)[1:2]
-})
+    dplyr::mutate(weight = sfnetworks::edge_length())
