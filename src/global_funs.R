@@ -93,3 +93,174 @@ theme_base <- function(base_size = 16, base_family = "") {
         )
     # TODO: get margins right
 }
+
+#' Compute total length of a path from edge indices
+#'
+#' @description
+#' Given a set of edge indices from a network path, this function computes the
+#' total length of the corresponding path in the spatial network. The result is
+#' returned as a numeric value with units dropped.
+#'
+#' @param net An `sfnetwork` object representing the spatial network.
+#' @param temp_edges A vector of edge indices representing a path through the network.
+#'
+#' @return A numeric scalar giving the total length of the path (in meters).
+#' @export
+slice_fun <- function(net, temp_edges) {
+    return(net |>
+        tidygraph::activate("edges") |>
+        dplyr::slice(temp_edges) |>
+        sf::st_as_sf() |>
+        sf::st_combine() |>
+        sf::st_length() |>
+        units::drop_units())
+}
+
+#' Compute all shortest paths from one node to a set of target nodes
+#'
+#' @description
+#' Uses `sfnetworks::st_network_paths()` to compute shortest paths from a single
+#' node in a spatial network to a set of target nodes, with optional weighting.
+#'
+#' @param from_node An integer index of the source node in the network.
+#' @param to_nodes A vector of integer indices representing target nodes.
+#' @param net An `sfnetwork` object representing the spatial network.
+#'
+#' @return A list object returned by `sfnetworks::st_network_paths()` that includes
+#'         node and edge paths.
+#' @export
+get_paths_from_one <- function(from_node, to_nodes, net) {
+    sfnetworks::st_network_paths(
+        x = net,
+        from = from_node,
+        to = to_nodes,
+        weights = "weight"
+    )
+}
+
+#' Compute pairwise shortest path distances between nodes in an sfnetwork
+#'
+#' @description
+#' Given a set of node indices from an `sfnetwork`, this function computes the
+#' shortest path distances between all unique pairs of nodes using
+#' `sfnetworks::st_network_paths()` and a helper function to sum the path lengths.
+#' A progress bar is included for long-running operations.
+#'
+#' @param node_ids An integer vector of node indices corresponding to points of interest
+#'        (e.g., nearest nodes to sample locations).
+#' @param net An `sfnetwork` object representing the spatial network, with a
+#'        `weight` column on the edges (e.g., length in meters).
+#'
+#' @return A `tibble` with columns:
+#'   - `from`: source node ID
+#'   - `to`: target node ID
+#'   - `path_length`: numeric shortest path length between `from` and `to`
+#' @export
+get_pairwise_network_distances <- function(node_ids, net) {
+    # setup progress handler
+    progressr::handlers(global = TRUE)
+    p <- progressr::progressor(along = node_ids)
+
+    all_paths <- purrr::map(
+        node_ids,
+        function(from_node) {
+            p(sprintf("Calculating paths from node %s", from_node))
+            get_paths_from_one(from_node, node_ids, net)
+        }
+    )
+
+    # Flatten into a dataframe
+    path_df <- purrr::imap_dfr(
+        all_paths,
+        ~ tibble::tibble(
+            from = node_ids[.y],
+            to = node_ids,
+            edge_paths = .x$edge_paths
+        )
+    )
+
+    # Compute lengths using slice_fun
+    path_df <- path_df |>
+        dplyr::mutate(
+            path_length = purrr::map_dbl(edge_paths, ~ slice_fun(net, .x))
+        ) |>
+        dplyr::filter(from != to)
+
+    return(path_df)
+}
+
+#' Plot paths from a given node in a spatial network with labeling and optional title
+#'
+#' @description
+#' Plots spatial paths from a single source node to:
+#' - all other nodes (`to = "all"`),
+#' - the two nearest nodes (`to = "nearest"`),
+#' - or a specific target node (`to = <node ID>`).
+#' Adds node ID labels and an optional title for distance.
+#'
+#' @param from_node Integer. The node ID to plot paths **from**.
+#' @param to_nodes Either:
+#'   - a single integer node ID to plot the path to that node,
+#'   - a vector of integer node IDs
+#'   - the string `"all"` to plot all paths from `from_node`,
+#'   - or the string `"nearest"` to plot paths to the 2 closest nodes.
+#' @param background_sf An `sf` object to make up the plotting background
+#' @param paths_sf An `sf` object with columns `from`, `to`, and `geometry`
+#'        representing precomputed path geometries between nodes.
+#' @param samples_sf An `sf` object of sampling locations, must include a
+#'        `nearest_node` column matching the node indices. Plotted in blue.
+#' @param farms_sf An `sf` object of farm locations. Plotted in red/black.
+#'
+#' @return A `ggplot` object showing the selected paths and labeled points.
+#' @export
+plot_paths_from_node <- function(
+    from_node, to_nodes, paths_sf, background_sf,
+    samples_sf, farms_sf) {
+    # validate `to`
+    if (!(is.numeric(to) || to %in% c("all", "nearest"))) {
+        stop('`to` must be an integer, "all", or "nearest"')
+    }
+
+    # filter paths from the specified source node
+    paths_from <- dplyr::filter(paths_sf, from == from_node)
+
+    # handle selection
+    if (is.numeric(to)) {
+        paths_plot <- dplyr::filter(paths_from, to %in% to_nodes)
+    } else if (to == "all") {
+        paths_plot <- paths_from
+    } else if (to == "nearest") {
+        paths_plot <- paths_from |>
+            dplyr::mutate(length = sf::st_length(geometry)) |>
+            dplyr::arrange(length) |>
+            dplyr::slice(1:2)
+    }
+
+    # label points: get coordinates + nearest_node
+    sample_labels <- samples_sf |>
+        dplyr::mutate(label = as.character(nearest_node))
+
+    # base plot
+    p <- ggplot2::ggplot() +
+        ggplot2::geom_sf(data = background_sf) +
+        ggplot2::geom_sf(data = paths_plot, color = "orange", size = 0.6) +
+        ggplot2::geom_sf(data = samples_sf, color = "blue", size = 2) +
+        ggplot2::geom_sf(
+            data = farms_sf, shape = 21, fill = "red",
+            color = "black", size = 3
+        ) +
+        ggplot2::geom_sf_text(
+            data = sample_labels,
+            ggplot2::aes(label = label), size = 3, nudge_y = 200
+        ) +
+        theme_base()
+
+    # if a single target node is specified, add title with distance
+    if (is.numeric(to)) {
+        path_dist <- sf::st_length(paths_plot$geometry[[1]]) |>
+            units::drop_units()
+        p <- p + ggplot2::ggtitle(sprintf("Distance: %.1f meters", path_dist))
+    }
+
+    return(p)
+}
