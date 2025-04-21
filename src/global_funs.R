@@ -205,8 +205,7 @@ get_pairwise_network_distances <- function(node_ids, net) {
 #'   - the string `"all"` to plot all paths from `from_node`,
 #'   - or the string `"nearest"` to plot paths to the 2 closest nodes.
 #' @param background_sf An `sf` object to make up the plotting background
-#' @param paths_sf An `sf` object with columns `from`, `to`, and `geometry`
-#'        representing precomputed path geometries between nodes.
+#' @param network An `sfnetworks` object of the shortest paths
 #' @param samples_sf An `sf` object of sampling locations, must include a
 #'        `nearest_node` column matching the node indices. Plotted in blue.
 #' @param farms_sf An `sf` object of farm locations. Plotted in red/black.
@@ -214,7 +213,7 @@ get_pairwise_network_distances <- function(node_ids, net) {
 #' @return A `ggplot` object showing the selected paths and labeled points.
 #' @export
 plot_paths_from_node <- function(
-    from_node, to_nodes, paths_sf, background_sf,
+    from_node, to_nodes, network, distance_table, background_sf,
     samples_sf, farms_sf) {
     # validate `to`
     if (!(is.numeric(to) || to %in% c("all", "nearest"))) {
@@ -222,11 +221,12 @@ plot_paths_from_node <- function(
     }
 
     # filter paths from the specified source node
-    paths_from <- dplyr::filter(paths_sf, from == from_node)
+    paths_from <- dplyr::filter(distance_table, from == from_node)
 
     # handle selection
     if (is.numeric(to)) {
-        paths_plot <- dplyr::filter(paths_from, to %in% to_nodes)
+        paths_plot <- paths_from |>
+            dplyr::filter(to %in% to_nodes)
     } else if (to == "all") {
         paths_plot <- paths_from
     } else if (to == "nearest") {
@@ -238,27 +238,37 @@ plot_paths_from_node <- function(
 
     # label points: get coordinates + nearest_node
     sample_labels <- samples_sf |>
-        dplyr::mutate(label = as.character(nearest_node))
+        dplyr::mutate(label = as.character(nearest_node)) |>
+        dplyr::filter(label %in% c(paths_plot$from, paths_plot$to))
 
     # base plot
     p <- ggplot2::ggplot() +
         ggplot2::geom_sf(data = background_sf) +
-        ggplot2::geom_sf(data = paths_plot, color = "orange", size = 0.6) +
-        ggplot2::geom_sf(data = samples_sf, color = "blue", size = 2) +
+        ggplot2::geom_sf(
+            data = network |>
+                sfnetworks::activate("edges") |>
+                dplyr::slice(unlist(paths_plot$edge_paths)) |>
+                sf::st_as_sf(),
+            color = "orange", size = 0.6
+        ) +
+        ggplot2::geom_sf(
+            data = samples_sf |>
+                dplyr::filter(nearest_node %in% c(paths_plot$from, paths_plot$to)),
+            color = "blue", size = 5
+        ) +
         ggplot2::geom_sf(
             data = farms_sf, shape = 21, fill = "red",
-            color = "black", size = 3
+            color = "black", size = 1.5
         ) +
         ggplot2::geom_sf_text(
             data = sample_labels,
-            ggplot2::aes(label = label), size = 3, nudge_y = 200
+            ggplot2::aes(label = label), size = 4, nudge_y = 200
         ) +
         theme_base()
 
     # if a single target node is specified, add title with distance
     if (is.numeric(to)) {
-        path_dist <- sf::st_length(paths_plot$geometry[[1]]) |>
-            units::drop_units()
+        path_dist <- min(paths_plot$path_length)
         p <- p + ggplot2::ggtitle(sprintf("Distance: %.1f meters", path_dist))
     }
 

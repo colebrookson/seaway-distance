@@ -179,7 +179,10 @@ ggplot() +
     # background
     geom_sf(data = nootka) +
     # all paths
-    geom_sf(data = dist_table$edge_paths, color = "gray60", size = 0.3, alpha = 0.1) +
+    geom_sf(data = network |>
+        sfnetworks::activate("edges") |>
+        dplyr::slice(unique(unlist(dist_table$edge_paths))) |>
+        sf::st_as_sf(), colour = "purple", alpha = 0.6) +
     # sample points
     geom_sf(data = samples_utm, color = "blue", size = 2) +
     # farm points
@@ -191,9 +194,10 @@ ggplot() +
 
 plot_paths_from_node(
     from_node = samples_utm$nearest_node[1],
-    to_nodes = samples_utm$nearest_node[5],
+    to_nodes = samples_utm$nearest_node[40],
+    distance_table = dist_table,
     background_sf = nootka,
-    paths_sf = paths_sf,
+    network = network,
     samples_sf = samples_utm,
     farms_sf = farms_utm
 )
