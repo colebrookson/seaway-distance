@@ -7,6 +7,8 @@
 
 #' 0 [SET UP] ------------------------------------------------------------------
 library(ggplot2)
+# for parallel purrr runs
+future::plan(future::multisession)
 
 # get functions I'll want
 source(here::here("./src/global_funs.R"))
@@ -50,8 +52,8 @@ farms_utm <- cbind(
 ##' 1.2 [TRIM SHAPEFILE] ---------------------------------------------------------
 # need this in an sf type
 geo_data_sf_bc <- sf::st_as_sf(geo_data)
-ggplot() +
-    geom_sf(data = geo_data_sf_bc)
+# ggplot() +
+#     geom_sf(data = geo_data_sf_bc)
 # switch to UTM
 nootka_utm <- sf::st_transform(geo_data_sf_bc,
     crs = "+proj=utm +zone=9 +datum=NAD83 +unit=m"
@@ -99,11 +101,18 @@ ggplot() +
 # generate a dense grid (adjust cellsize to trade off accuracy vs speed)
 grid_sample <- sf::st_sample(
     inverse_nootka,
-    # the size is really large to make a fine grid
-    size = 5000, type = "regular"
+    # the size is really large to make a fine grid - 1000 is good to see if
+    # this code all runs, you can tweak how fine you want it later
+    size = 1000, type = "regular"
 ) |>
     sf::st_as_sf()
 
+# join the actual points of the sampling locations to the sampled grid
+stopifnot(sf::st_crs(grid_sample) == sf::st_crs(samples_utm))
+all_nodes <- dplyr::bind_rows(
+    grid_sample |> dplyr::rename(geometry = x),
+    samples_utm |> dplyr::select(geometry)
+)
 ggplot() +
     geom_sf(data = inverse_nootka) +
     geom_sf(data = grid_sample, colour = "purple", alpha = 0.1) +
@@ -115,7 +124,7 @@ ggplot() +
     theme_base()
 
 # connect the grid
-grid_connected <- nngeo::st_connect(grid_sample, grid_sample, k = 9)
+grid_connected <- nngeo::st_connect(all_nodes, all_nodes, k = 9)
 
 # make the network itself
 network <- sfnetworks::as_sfnetwork(grid_connected, directed = FALSE) |>
@@ -135,16 +144,16 @@ ggplot() +
     theme_base()
 
 # 3 [GET PATH LENGTHS] ---------------------------------------------------------
-# you have to "snap" the real points to the network points
 network_nodes <- sf::st_as_sf(network, "nodes")
-samples_utm$nearest_node <- sf::st_nearest_feature(samples_utm, network_nodes)
-
-sample_node_ids <- samples_utm$nearest_node
+site_node_ids <- sf::st_nearest_feature(samples_utm, network_nodes)
 
 # compute all pairwise distances using manual helper function
-progressr::with_progress({
-    dist_table <- get_pairwise_network_distances(sample_node_ids, network)
-})
+dist_table <- get_pairwise_network_distances(
+    node_ids = sample_node_ids,
+    net = network,
+    parallel = TRUE
+)
+
 
 # 4 [PLOT THE PATH LENGHTS] ----------------------------------------------------
 # we want the geometries from out dist_table
@@ -200,4 +209,15 @@ plot_paths_from_node(
     network = network,
     samples_sf = samples_utm,
     farms_sf = farms_utm
+)
+
+plot_paths_from_node(
+    from_node = 306,
+    to_nodes = 259,
+    distance_table = dist_table,
+    background_sf = nootka,
+    network = network,
+    samples_sf = samples_utm,
+    farms_sf = farms_utm,
+    zoom_to_extent = TRUE
 )
