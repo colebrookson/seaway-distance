@@ -101,7 +101,7 @@ ggplot() +
 # generate a dense grid (adjust cellsize to trade off accuracy vs speed)
 grid_sample <- sf::st_sample(
     inverse_nootka,
-    # the size is really large to make a fine grid - 1000 is good to see if
+    # the size must be really large to make a fine grid - 1000 is good to see if
     # this code all runs, you can tweak how fine you want it later
     size = 1000, type = "regular"
 ) |>
@@ -145,7 +145,20 @@ ggplot() +
 
 # 3 [GET PATH LENGTHS] ---------------------------------------------------------
 network_nodes <- sf::st_as_sf(network, "nodes")
+# get only the network nodes that are the ones the sites refer to by a simple
+# ask of what nodes are closest to those locations (they'll just be the nodes
+# themselves)
 site_node_ids <- sf::st_nearest_feature(samples_utm, network_nodes)
+
+sfnetworks::st_network_paths(
+    x = network,
+    from = from_node,
+    to = to_nodes
+)
+
+
+
+
 
 # compute all pairwise distances using manual helper function
 dist_table <- get_pairwise_network_distances(
