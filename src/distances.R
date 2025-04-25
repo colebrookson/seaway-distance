@@ -103,7 +103,7 @@ grid_sample <- sf::st_sample(
     inverse_nootka,
     # the size must be really large to make a fine grid - 1000 is good to see if
     # this code all runs, you can tweak how fine you want it later
-    size = 1000, type = "regular"
+    size = 50000, type = "regular"
 ) |>
     sf::st_as_sf()
 
@@ -149,52 +149,52 @@ network_nodes <- sf::st_as_sf(network, "nodes")
 # ask of what nodes are closest to those locations (they'll just be the nodes
 # themselves)
 site_node_ids <- sf::st_nearest_feature(samples_utm, network_nodes)
+samples_utm$network_nodes <- site_node_ids
 
-sfnetworks::st_network_paths(
-    x = network,
-    from = from_node,
-    to = to_nodes
+# calculate total path length for each route
+edge_weights <- network |>
+    tidygraph::activate("edges") |>
+    tidygraph::pull(weight)
+
+# set your source and target node IDs
+node_ids <- site_node_ids
+
+# choose sequential or parallel execution
+use_parallel <- FALSE
+map_fun <- if (use_parallel) furrr::future_map else purrr::map
+
+# calculate all pairwise paths
+all_paths <- map_fun(
+    node_ids,
+    function(from_node) {
+        paths <- sfnetworks::st_network_paths(
+            x = network,
+            from = from_node,
+            to = node_ids,
+            weights = "weight"
+        )
+        tibble::tibble(
+            from = from_node,
+            to = node_ids,
+            edge_paths = paths$edge_paths
+        )
+    }
 )
 
+# flatten into a single tibble
+path_df <- dplyr::bind_rows(all_paths)
 
+# exclude self paths
+path_df <- dplyr::filter(path_df, from != to)
 
+path_df <- path_df |>
+    dplyr::mutate(
+        path_length = purrr::map_dbl(edge_paths, ~ sum(edge_weights[.x]))
+    )
 
-
-# compute all pairwise distances using manual helper function
-dist_table <- get_pairwise_network_distances(
-    node_ids = sample_node_ids,
-    net = network,
-    parallel = TRUE
-)
-
+# 3.1 [GET PATH LENGTHS FOR SOME SPECIFIC NODES] -------------------------------
 
 # 4 [PLOT THE PATH LENGHTS] ----------------------------------------------------
-# we want the geometries from out dist_table
-# dist_table <- dist_table |>
-#     dplyr::mutate(
-#         path_geom = purrr::map(edge_paths, function(edges) {
-#             net_slice <- network |>
-#                 tidygraph::activate("edges") |>
-#                 dplyr::slice(unlist(edge_paths)) |>
-#                 sf::st_as_sf()
-
-#             sf::st_combine(net_slice$x) |>
-#                 sf::st_line_merge()
-#         }, .progress = TRUE)
-#     )
-# dist_table$path_geom[[1]] == dist_table$path_geom[[2]]
-# make an sf object from the path geometries for easier plotting
-# clean_geoms <- purrr::map(dist_table$path_geom, 1)
-# paths_sf <- sf::st_sf(
-#     from = dist_table$from,
-#     to = dist_table$to,
-#     geometry = sf::st_sfc(clean_geoms),
-#     crs = sf::st_crs(network)
-# )
-
-#' WHEN I COME BACK
-#' just do it how i do it for kx where you activate the bit of the network you
-#' want and then plot that, it doesn't need to be this complicated it hink
 
 # plot all paths
 ggplot() +
@@ -203,7 +203,7 @@ ggplot() +
     # all paths
     geom_sf(data = network |>
         sfnetworks::activate("edges") |>
-        dplyr::slice(unique(unlist(dist_table$edge_paths))) |>
+        dplyr::slice(unique(unlist(path_df$edge_paths))) |>
         sf::st_as_sf(), colour = "purple", alpha = 0.6) +
     # sample points
     geom_sf(data = samples_utm, color = "blue", size = 2) +
@@ -215,22 +215,11 @@ ggplot() +
     theme_base()
 
 plot_paths_from_node(
-    from_node = samples_utm$nearest_node[1],
-    to_nodes = samples_utm$nearest_node[40],
-    distance_table = dist_table,
+    from_node = samples_utm$network_nodes[1],
+    to_nodes = samples_utm$network_nodes[40],
+    distance_table = path_df,
     background_sf = nootka,
     network = network,
     samples_sf = samples_utm,
     farms_sf = farms_utm
-)
-
-plot_paths_from_node(
-    from_node = 306,
-    to_nodes = 259,
-    distance_table = dist_table,
-    background_sf = nootka,
-    network = network,
-    samples_sf = samples_utm,
-    farms_sf = farms_utm,
-    zoom_to_extent = TRUE
 )

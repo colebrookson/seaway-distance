@@ -138,126 +138,15 @@ get_paths_from_one <- function(from_node, to_nodes, net) {
     )
 }
 
-#' Compute pairwise shortest path distances between nodes in an sfnetwork
-#'
-#' @description
-#' Given a set of node indices from an `sfnetwork`, this function computes the
-#' shortest path distances between all unique pairs using `sfnetworks::st_network_paths()`
-#' and a helper to compute total path length. Supports optional parallel execution with `furrr`.
-#'
-#' @param node_ids An integer vector of node indices corresponding to points of interest.
-#' @param net An `sfnetwork` object representing the spatial network with weighted edges.
-#' @param parallel Logical. If `TRUE`, uses `furrr::future_map()` for parallel computation.
-#'
-#' @return A `tibble` with columns:
-#'   - `from`: source node ID
-#'   - `to`: target node ID
-#'   - `edge_paths`: list of edge indices
-#'   - `path_length`: total length of path
-#' @export
-get_pairwise_network_distances <- function(
-    node_ids,
-    net,
-    parallel = TRUE) {
-    # choose map function based on parallel flag
-    compute_paths <- if (parallel) furrr::future_map else purrr::map
-
-    # compute all shortest paths
-    all_paths <- compute_paths(node_ids, function(from_node) {
-        get_paths_from_one(from_node, node_ids, net)
-    },
-    .progress = TRUE
-    )
-
-    # flatten into dataframe
-    path_df <- purrr::imap_dfr(
-        all_paths,
-        ~ tibble::tibble(
-            from = node_ids[.y],
-            to = node_ids,
-            edge_paths = .x$edge_paths
-        ),
-        .progress = TRUE
-    )
-
-    # compute path lengths
-    path_df <- path_df |>
-        dplyr::mutate(
-            path_length = furrr::future_map_dbl(
-                edge_paths, ~ slice_fun(net, .x),
-                seed = TRUE,
-                .progress = TRUE
-            )
-        ) |>
-        dplyr::filter(from != to)
-
-    return(path_df)
-}
-
-
-# #' Compute pairwise shortest path distances between nodes in an sfnetwork
-# #'
-# #' @description
-# #' Given a set of node indices from an `sfnetwork`, this function computes the
-# #' shortest path distances between all unique pairs of nodes using
-# #' `sfnetworks::st_network_paths()` and a helper function to sum the path lengths.
-# #' A progress bar is included for long-running operations.
-# #'
-# #' @param node_ids An integer vector of node indices corresponding to points of interest
-# #'        (e.g., nearest nodes to sample locations).
-# #' @param net An `sfnetwork` object representing the spatial network, with a
-# #'        `weight` column on the edges (e.g., length in meters).
-# #'
-# #' @return A `tibble` with columns:
-# #'   - `from`: source node ID
-# #'   - `to`: target node ID
-# #'   - `path_length`: numeric shortest path length between `from` and `to`
-# #' @export
-# get_pairwise_network_distances <- function(node_ids, net) {
-#     # # setup progress handler
-#     # progressr::handlers(global = TRUE)
-#     # p <- progressr::progressor(along = node_ids)
-
-#     all_paths <- purrr::map(
-#         node_ids,
-#         function(from_node) {
-#             print(sprintf("Calculating paths from node %s", from_node))
-#             get_paths_from_one(from_node, node_ids, net)
-#         },
-#         .progress = list(
-#             clear = FALSE,
-#             format_done = "1/3 tasks completed",
-#             name = "Getting All Paths (1/3 tasks)"
-#         )
-#     )
-
-#     # Flatten into a dataframe
-#     path_df <- purrr::imap_dfr(
-#         all_paths,
-#         ~ tibble::tibble(
-#             from = node_ids[.y],
-#             to = node_ids,
-#             edge_paths = .x$edge_paths
-#         )
-#     )
-
-#     # Compute lengths using slice_fun
-#     path_df <- path_df |>
-#         dplyr::mutate(
-#             path_length = purrr::map_dbl(edge_paths, ~ slice_fun(net, .x))
-#         ) |>
-#         dplyr::filter(from != to)
-
-#     return(path_df)
-# }
-
-#' Plot paths from a given node in a spatial network with labeling and optional title
+#' Plot paths from a given node in a spatial network with labeling and
+#' optional title
 #'
 #' @description
 #' Plots spatial paths from a single source node to:
 #' - all other nodes (`to_nodes = "all"`),
 #' - the two nearest nodes (`to_nodes = "nearest"`),
-#' - or a specific target node or vector of targets (`to_nodes = <node ID(s)>`).
+#' - or a specific target node or vector of targets
+#'  (`to_nodes = <node ID(s)>`).
 #' Adds node ID labels and an optional title for distance.
 #'
 #' @param from_node Integer. The node ID to plot paths **from**.
@@ -266,11 +155,16 @@ get_pairwise_network_distances <- function(
 #'   - the string `"all"` to plot all paths from `from_node`,
 #'   - or the string `"nearest"` to plot paths to the 2 closest nodes.
 #' @param network An `sfnetwork` object representing the spatial network.
-#' @param distance_table A data.frame or tibble with columns `from`, `to`, `path_length`, and `edge_paths`.
-#' @param background_sf An `sf` object representing the map background (e.g., land or water mask).
-#' @param samples_sf An `sf` object of sampling locations, must include a `nearest_node` column.
+#' @param distance_table A data.frame or tibble with columns `from`, `to`,
+#' `path_length`, and `edge_paths`.
+#' @param background_sf An `sf` object representing the map background
+#' (e.g., land or water mask).
+#' @param samples_sf An `sf` object of sampling locations, must include a
+#' `nearest_node` column.
 #' @param farms_sf An `sf` object of farm locations.
-#' @param zoom_to_extent Logical. If `TRUE`, zooms the plot extent to just the region around the plotted paths (+20% padding).
+#' @param plot_farms Logical. If `TRUE` it plots the farms as points on the maps
+#' @param zoom_to_extent Logical. If `TRUE`, zooms the plot extent to just
+#'  the region around the plotted paths (+20% padding).
 #'
 #' @return A `ggplot` object showing the selected paths and labeled points.
 #' @export
@@ -299,7 +193,7 @@ plot_paths_from_node <- function(
 
     # label points
     sample_labels <- samples_sf |>
-        dplyr::mutate(label = as.character(nearest_node)) |>
+        dplyr::mutate(label = as.character(network_nodes)) |>
         dplyr::filter(label %in% c(paths_plot$from, paths_plot$to))
 
     # extract edge geometries
@@ -311,16 +205,17 @@ plot_paths_from_node <- function(
     # base plot
     p <- ggplot2::ggplot() +
         ggplot2::geom_sf(data = background_sf) +
-        ggplot2::geom_sf(data = edges_sf, color = "orange", size = 0.6) +
+        ggplot2::geom_sf(data = edges_sf, color = "orange", linewidth = 2) +
         ggplot2::geom_sf(
             data = samples_sf |>
-                dplyr::filter(nearest_node %in% c(paths_plot$from, paths_plot$to)),
+                dplyr::filter(network_nodes %in%
+                    c(paths_plot$from, paths_plot$to)),
             color = "blue", size = 5
         ) +
-        ggplot2::geom_sf(
-            data = farms_sf, shape = 21, fill = "red",
-            color = "black", size = 1.5
-        ) +
+        # ggplot2::geom_sf(
+        #     data = farms_sf, shape = 21, fill = "red",
+        #     color = "black", size = 1.5
+        # ) +
         ggplot2::geom_sf_text(
             data = sample_labels,
             ggplot2::aes(label = label), size = 4, nudge_y = 200
@@ -347,6 +242,8 @@ plot_paths_from_node <- function(
                 expand = FALSE
             )
     }
+    # optional: plot the farms
+
 
     return(p)
 }
