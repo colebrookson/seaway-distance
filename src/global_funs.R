@@ -1,14 +1,3 @@
-##' File Description
-##' AUTHOR: Cole B. Brookson
-##' DATE OF CREATION: 2022-10-14
-#'
-#' This targets file contains all functions that don't relate to a specific
-#' part of the analysis, but are required to perform general tasks
-#'
-#' All functions are documented using the roxygen2 framework and the docstring
-#' library
-#'
-
 `%notin%` <- Negate(`%in%`)
 
 #' Foundation Theme
@@ -32,22 +21,23 @@
 #' @family themes
 #' @export
 #' @importFrom ggplot2 theme_grey
-theme_foundation <- function(base_size = 16, base_family = "") {
-    thm <- theme_grey(base_size = base_size, base_family = base_family)
-    for (i in names(thm)) {
-        if ("colour" %in% names(thm[[i]])) {
-            thm[[i]]["colour"] <- list(NULL)
-        }
-        if ("fill" %in% names(thm[[i]])) {
-            thm[[i]]["fill"] <- list(NULL)
-        }
+theme_foundation <- function(base_size = 20, base_family = "") {
+  thm <- theme_grey(base_size = base_size, base_family = base_family)
+  for (i in names(thm)) {
+    if ("colour" %in% names(thm[[i]])) {
+      thm[[i]]["colour"] <- list(NULL)
     }
-    thm + theme(
-        panel.border = element_rect(fill = NA),
-        legend.background = element_rect(colour = NA),
-        line = element_line(colour = "black"),
-        rect = element_rect(fill = "white", colour = "black"),
-        text = element_text(colour = "black")
+    if ("fill" %in% names(thm[[i]])) {
+      thm[[i]]["fill"] <- list(NULL)
+    }
+  }
+  thm +
+    theme(
+      panel.border = element_rect(fill = NA),
+      legend.background = element_rect(colour = NA),
+      line = element_line(colour = "black"),
+      rect = element_rect(fill = "white", colour = "black"),
+      text = element_text(colour = "black")
     )
 }
 
@@ -59,40 +49,52 @@ theme_foundation <- function(base_size = 16, base_family = "") {
 #' @export
 #' @family themes
 #' @example inst/examples/ex-theme_base.R
-theme_base <- function(base_size = 16, base_family = "") {
-    theme_foundation() +
-        theme(
-            line = element_line(
-                colour = "black",
-                lineend = "round",
-                linetype = "solid"
-            ),
-            rect = element_rect(
-                fill = "white",
-                colour = "black",
-                linetype = "solid"
-            ),
-            text = element_text(
-                colour = "black",
-                face = "plain",
-                family = base_family,
-                size = base_size,
-                vjust = 0.5,
-                hjust = 0.5,
-                lineheight = 1
-            ),
-            panel.grid = element_blank(),
-            strip.background = element_rect(colour = NA),
-            legend.key = element_rect(colour = NA),
-            title = element_text(size = rel(1)),
-            plot.title = element_text(size = rel(1.2), face = "bold"),
-            strip.text = element_text(),
-            axis.ticks.length = unit(0.5, "lines"),
-            # add my addition here
-            plot.background = element_rect(colour = NA)
-        )
-    # TODO: get margins right
+theme_better <- function(base_size = 20, base_family = "") {
+  theme_foundation() +
+    theme(
+      line = element_line(
+        colour = "black",
+        lineend = "round",
+        linetype = "solid"
+      ),
+      rect = element_rect(
+        fill = "white",
+        colour = "black",
+        linetype = "solid"
+      ),
+      text = element_text(
+        colour = "black",
+        face = "plain",
+        family = "Helvetica",
+        size = base_size,
+        vjust = 0.5,
+        hjust = 0.5,
+        lineheight = 1
+      ),
+      panel.grid = element_blank(),
+      strip.background = element_rect(colour = NA),
+      legend.key = element_rect(colour = NA),
+      title = element_text(size = rel(1)),
+      plot.title = element_text(
+        size = rel(1.4),
+        face = "bold",
+        hjust = 0.5
+      ),
+      axis.title = element_text(
+        size = rel(1.15),
+        face = "bold"
+      ),
+      axis.text = element_text(
+        size = rel(1)
+      ),
+      strip.text = element_text(),
+      axis.ticks.length = unit(0.5, "lines"),
+      # add my addition here
+      plot.background = element_rect(colour = NA)
+    )
+  # TODO: get margins right
 }
+
 
 #' Compute total length of a path from edge indices
 #'
@@ -107,13 +109,15 @@ theme_base <- function(base_size = 16, base_family = "") {
 #' @return A numeric scalar giving the total length of the path (in meters).
 #' @export
 slice_fun <- function(net, temp_edges) {
-    return(net |>
-        tidygraph::activate("edges") |>
-        dplyr::slice(temp_edges) |>
-        sf::st_as_sf() |>
-        sf::st_combine() |>
-        sf::st_length() |>
-        units::drop_units())
+  return(
+    net |>
+      tidygraph::activate("edges") |>
+      dplyr::slice(temp_edges) |>
+      sf::st_as_sf() |>
+      sf::st_combine() |>
+      sf::st_length() |>
+      units::drop_units()
+  )
 }
 
 #' Compute all shortest paths from one node to a set of target nodes
@@ -130,12 +134,12 @@ slice_fun <- function(net, temp_edges) {
 #'         node and edge paths.
 #' @export
 get_paths_from_one <- function(from_node, to_nodes, net) {
-    sfnetworks::st_network_paths(
-        x = net,
-        from = from_node,
-        to = to_nodes,
-        weights = "weight"
-    )
+  sfnetworks::st_network_paths(
+    x = net,
+    from = from_node,
+    to = to_nodes,
+    weights = "weight"
+  )
 }
 
 #' Plot paths from a given node in a spatial network with labeling and
@@ -169,81 +173,92 @@ get_paths_from_one <- function(from_node, to_nodes, net) {
 #' @return A `ggplot` object showing the selected paths and labeled points.
 #' @export
 plot_paths_from_node <- function(
-    from_node, to_nodes, network, distance_table, background_sf,
-    samples_sf, farms_sf, zoom_to_extent = FALSE) {
-    # validate `to_nodes`
-    if (!(is.numeric(to_nodes) || to_nodes %in% c("all", "nearest"))) {
-        stop('`to_nodes` must be numeric, "all", or "nearest"')
-    }
+  from_node,
+  to_nodes,
+  network,
+  distance_table,
+  background_sf,
+  samples_sf,
+  farms_sf,
+  zoom_to_extent = FALSE
+) {
+  # validate `to_nodes`
+  if (!(is.numeric(to_nodes) || to_nodes %in% c("all", "nearest"))) {
+    stop('`to_nodes` must be numeric, "all", or "nearest"')
+  }
 
-    # filter paths from the specified source node
-    paths_from <- dplyr::filter(distance_table, from == from_node)
+  # filter paths from the specified source node
+  paths_from <- dplyr::filter(distance_table, from == from_node)
 
-    # handle selection
-    if (is.numeric(to_nodes)) {
-        paths_plot <- dplyr::filter(paths_from, to %in% to_nodes)
-    } else if (to_nodes == "all") {
-        paths_plot <- paths_from
-    } else if (to_nodes == "nearest") {
-        paths_plot <- paths_from |>
-            dplyr::mutate(length = sf::st_length(geometry)) |>
-            dplyr::arrange(length) |>
-            dplyr::slice(1:2)
-    }
+  # handle selection
+  if (is.numeric(to_nodes)) {
+    paths_plot <- dplyr::filter(paths_from, to %in% to_nodes)
+  } else if (to_nodes == "all") {
+    paths_plot <- paths_from
+  } else if (to_nodes == "nearest") {
+    paths_plot <- paths_from |>
+      dplyr::mutate(length = sf::st_length(geometry)) |>
+      dplyr::arrange(length) |>
+      dplyr::slice(1:2)
+  }
 
-    # label points
-    sample_labels <- samples_sf |>
-        dplyr::mutate(label = as.character(network_nodes)) |>
-        dplyr::filter(label %in% c(paths_plot$from, paths_plot$to))
+  # label points
+  sample_labels <- samples_sf |>
+    dplyr::mutate(label = as.character(network_nodes)) |>
+    dplyr::filter(label %in% c(paths_plot$from, paths_plot$to))
 
-    # extract edge geometries
-    edges_sf <- network |>
-        sfnetworks::activate("edges") |>
-        dplyr::slice(unlist(paths_plot$edge_paths)) |>
-        sf::st_as_sf()
+  # extract edge geometries
+  edges_sf <- network |>
+    sfnetworks::activate("edges") |>
+    dplyr::slice(unlist(paths_plot$edge_paths)) |>
+    sf::st_as_sf()
 
-    # base plot
-    p <- ggplot2::ggplot() +
-        ggplot2::geom_sf(data = background_sf) +
-        ggplot2::geom_sf(data = edges_sf, color = "orange", linewidth = 2) +
-        ggplot2::geom_sf(
-            data = samples_sf |>
-                dplyr::filter(network_nodes %in%
-                    c(paths_plot$from, paths_plot$to)),
-            color = "blue", size = 5
-        ) +
-        # ggplot2::geom_sf(
-        #     data = farms_sf, shape = 21, fill = "red",
-        #     color = "black", size = 1.5
-        # ) +
-        ggplot2::geom_sf_text(
-            data = sample_labels,
-            ggplot2::aes(label = label), size = 4, nudge_y = 200
-        ) +
-        theme_base()
+  # base plot
+  p <- ggplot2::ggplot() +
+    ggplot2::geom_sf(data = background_sf) +
+    ggplot2::geom_sf(data = edges_sf, color = "orange", linewidth = 2) +
+    ggplot2::geom_sf(
+      data = samples_sf |>
+        dplyr::filter(
+          network_nodes %in%
+            c(paths_plot$from, paths_plot$to)
+        ),
+      color = "blue",
+      size = 5
+    ) +
+    # ggplot2::geom_sf(
+    #     data = farms_sf, shape = 21, fill = "red",
+    #     color = "black", size = 1.5
+    # ) +
+    ggplot2::geom_sf_text(
+      data = sample_labels,
+      ggplot2::aes(label = label),
+      size = 4,
+      nudge_y = 200
+    ) +
+    theme_base()
 
-    # optional: add title if only one distance
-    if (is.numeric(to_nodes) && length(to_nodes) == 1) {
-        path_dist <- min(paths_plot$path_length)
-        p <- p + ggplot2::ggtitle(sprintf("Distance: %.1f meters", path_dist))
-    }
+  # optional: add title if only one distance
+  if (is.numeric(to_nodes) && length(to_nodes) == 1) {
+    path_dist <- min(paths_plot$path_length)
+    p <- p + ggplot2::ggtitle(sprintf("Distance: %.1f meters", path_dist))
+  }
 
-    # optional: zoom to region of interest
-    if (zoom_to_extent) {
-        # get extent of edge geometries
-        bbox <- sf::st_bbox(edges_sf)
-        x_pad <- 0.2 * (bbox["xmax"] - bbox["xmin"])
-        y_pad <- 0.2 * (bbox["ymax"] - bbox["ymin"])
+  # optional: zoom to region of interest
+  if (zoom_to_extent) {
+    # get extent of edge geometries
+    bbox <- sf::st_bbox(edges_sf)
+    x_pad <- 0.2 * (bbox["xmax"] - bbox["xmin"])
+    y_pad <- 0.2 * (bbox["ymax"] - bbox["ymin"])
 
-        p <- p +
-            ggplot2::coord_sf(
-                xlim = c(bbox["xmin"] - x_pad, bbox["xmax"] + x_pad),
-                ylim = c(bbox["ymin"] - y_pad, bbox["ymax"] + y_pad),
-                expand = FALSE
-            )
-    }
-    # optional: plot the farms
+    p <- p +
+      ggplot2::coord_sf(
+        xlim = c(bbox["xmin"] - x_pad, bbox["xmax"] + x_pad),
+        ylim = c(bbox["ymin"] - y_pad, bbox["ymax"] + y_pad),
+        expand = FALSE
+      )
+  }
+  # optional: plot the farms
 
-
-    return(p)
+  return(p)
 }
