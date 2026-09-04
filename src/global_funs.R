@@ -119,7 +119,8 @@ theme_better <- function(base_size = 20, base_family = "") {
 #' returned as a numeric value with units dropped.
 #'
 #' @param net An `sfnetwork` object representing the spatial network.
-#' @param temp_edges A vector of edge indices representing a path through the network.
+#' @param temp_edges A vector of edge indices representing a path through the
+#' network.
 #'
 #' @return A numeric scalar giving the total length of the path (in meters).
 #' @export
@@ -145,8 +146,8 @@ slice_fun <- function(net, temp_edges) {
 #' @param to_nodes A vector of integer indices representing target nodes.
 #' @param net An `sfnetwork` object representing the spatial network.
 #'
-#' @return A list object returned by `sfnetworks::st_network_paths()` that includes
-#'         node and edge paths.
+#' @return A list object returned by `sfnetworks::st_network_paths()` that
+#'  includes node and edge paths.
 #' @export
 get_paths_from_one <- function(from_node, to_nodes, net) {
   sfnetworks::st_network_paths(
@@ -155,6 +156,26 @@ get_paths_from_one <- function(from_node, to_nodes, net) {
     to = to_nodes,
     weights = "weight"
   )
+}
+
+#' Gets the set of points to which an edge should be calculated to
+#'
+#' @description
+#' In the case where there are different "coloured" (in the graph theoretic
+#' sense) nodes, we should only compute edges to the opposite coloured node,
+#' not between nodes of the same colour
+#' @param from_node An integer index of the source node in the network.
+#' @param colour A character defining the "type" of node to look for as the
+#' destination node colour
+#' @param df The dataframe with the relevant information
+#'
+#' @return A vector of node_id's that correspond to the correct destination
+#' nodes
+#' @export
+get_destination_nodes <- function(from_node, colour, df) {
+  df$network_nodes[which(
+    df$location_type != colour
+  )]
 }
 
 #' Plot paths from a given node in a spatial network with labeling and
