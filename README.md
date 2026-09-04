@@ -5,4 +5,4 @@ Want to figure out how far it is from one place to some other places? Here you g
 
 **Here's the output map I generated in about 1000 total lines of code**
 
-![](./paths-from-sites-to-farms-faceted.pdf)
+![](./paths-from-sites-to-farms-faceted.png)
