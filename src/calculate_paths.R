@@ -451,6 +451,11 @@ faceted_paths <- wrap_plots(
   ncol = 3,
   guides = "collect"
 )
+faceted_paths_vert <- wrap_plots(
+  lapply(sites, make_panel),
+  ncol = 1,
+  guides = "collect"
+)
 
 ggsave(
   here::here("paths-from-sites-to-farms-faceted.pdf"),
@@ -460,8 +465,8 @@ ggsave(
 )
 ggsave(
   here::here("paths-from-sites-to-farms-faceted.png"),
-  faceted_paths,
-  width = 26,
-  height = 12,
+  faceted_paths_vert,
+  width = 12,
+  height = 30,
   dpi = 300
 )
