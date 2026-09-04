@@ -458,3 +458,10 @@ ggsave(
   width = 26,
   height = 12
 )
+ggsave(
+  here::here("paths-from-sites-to-farms-faceted.png"),
+  faceted_paths,
+  width = 26,
+  height = 12,
+  dpi = 300
+)
