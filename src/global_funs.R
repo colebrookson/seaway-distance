@@ -90,7 +90,22 @@ theme_better <- function(base_size = 20, base_family = "") {
       strip.text = element_text(),
       axis.ticks.length = unit(0.5, "lines"),
       # add my addition here
-      plot.background = element_rect(colour = NA)
+      panel.background = element_rect(
+        fill = "transparent",
+        colour = NA
+      ),
+      plot.background = element_rect(
+        fill = "transparent",
+        colour = NA
+      ),
+      legend.background = element_rect(
+        fill = "transparent",
+        colour = NA
+      ),
+      legend.box.background = element_rect(
+        fill = "transparent",
+        colour = NA
+      )
     )
   # TODO: get margins right
 }
